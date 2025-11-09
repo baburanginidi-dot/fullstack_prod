@@ -1,0 +1,7 @@
+{
+  "name": "Gemini Voice Agent Portal",
+  "description": "A full-stack Voice Agent application with an Admin Portal for configuration and an end-user interface for real-time voice conversations powered by the Gemini Live API.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
