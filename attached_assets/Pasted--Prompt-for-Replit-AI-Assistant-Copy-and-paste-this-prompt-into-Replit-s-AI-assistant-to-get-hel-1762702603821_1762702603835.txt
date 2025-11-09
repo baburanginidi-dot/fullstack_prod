@@ -1,0 +1,232 @@
+# Prompt for Replit AI Assistant
+
+Copy and paste this prompt into Replit's AI assistant to get help setting up your project:
+
+---
+
+## Main Prompt for Replit AI
+
+```
+I have a full-stack voice agent application that needs to be configured for Replit deployment. Here's what I need:
+
+**Project Overview:**
+- Frontend: React + TypeScript + Vite
+- Backend: Express + TypeScript + WebSocket (ws)
+- Database: Currently using in-memory store, need to migrate to Replit Database
+- AI: Google Gemini API for voice conversations
+- Authentication: Phone number-based (no passwords)
+
+**Current Setup:**
+- Server runs on port 3001 (or process.env.PORT)
+- Frontend runs on port 3000 (separate in dev, should be served from Express in production)
+- WebSocket server for real-time audio communication
+- User data stored in-memory (needs Replit Database)
+
+**What I Need Help With:**
+
+1. **Install Replit Database:**
+   - Install @replit/database package
+   - Replace the in-memory userStore with Replit Database implementation
+   - Current store location: server/store/userStore.ts
+   - Store interface: getUserByPhone, createUser, updateUser methods
+
+2. **Update Server for Replit:**
+   - Detect Replit environment (check for REPL_ID, REPL_SLUG, REPL_OWNER)
+   - Auto-detect Replit URL for FRONTEND_URL if not set in secrets
+   - Auto-convert WebSocket URL to wss:// for secure connections
+   - Update CORS to allow Replit domain dynamically
+   - Serve frontend static files from Express (serve dist/ folder)
+   - Update WebSocket origin validation for Replit
+
+3. **Environment Variables:**
+   - GEMINI_API_KEY (required, from Replit Secrets)
+   - FRONTEND_URL (optional, auto-detect from REPL_SLUG and REPL_OWNER)
+   - WS_URL (optional, auto-detect and convert to wss://)
+   - PORT (automatically provided by Replit)
+
+4. **Build Configuration:**
+   - Ensure .replit file is configured correctly
+   - Build process: npm run build (frontend) + npm run build:server (backend)
+   - Serve both frontend and backend from same port in production
+
+5. **Code Changes Needed:**
+   - Create ReplitUserStore class using @replit/database
+   - Update server/index.ts to detect Replit environment
+   - Add static file serving for frontend
+   - Update WebSocket URL resolution
+   - Update CORS configuration for Replit domain
+
+**Key Files:**
+- server/index.ts - Main server file
+- server/store/userStore.ts - Current in-memory store (needs Replit DB)
+- server/utils/phoneValidator.ts - Phone validation (already works)
+- vite.config.ts - Frontend build config
+- package.json - Dependencies and scripts
+- .replit - Replit configuration (already created)
+
+**Requirements:**
+- All user data (phone numbers, names, sessions) should persist in Replit Database
+- WebSocket connections should work with wss:// in production
+- Frontend should be served from Express server in production
+- CORS should allow Replit domain automatically
+- Environment detection should work in both local dev and Replit
+
+Please help me:
+1. Install @replit/database
+2. Create ReplitUserStore implementation
+3. Update server/index.ts for Replit compatibility
+4. Test that everything works together
+
+Let's start by installing the database package and then updating the code step by step.
+```
+
+---
+
+## Alternative Shorter Prompt (If the above is too long)
+
+```
+Help me configure my Node.js/TypeScript full-stack app for Replit deployment.
+
+**What I have:**
+- React frontend + Express backend with WebSocket
+- In-memory user store (server/store/userStore.ts)
+- Google Gemini API integration
+- Phone number authentication
+
+**What I need:**
+1. Install @replit/database and replace in-memory store
+2. Update server/index.ts to:
+   - Detect Replit environment (REPL_ID, REPL_SLUG, REPL_OWNER)
+   - Auto-detect Replit URL for CORS and WebSocket
+   - Serve frontend static files from Express
+   - Use wss:// for WebSocket in production
+3. Ensure frontend and backend work together on Replit
+
+Current server file: server/index.ts
+Current store: server/store/userStore.ts (implements UserStore interface)
+
+Please help me migrate to Replit Database and make the server Replit-compatible.
+```
+
+---
+
+## Step-by-Step Prompts (If you want to do it incrementally)
+
+### Step 1: Install Database
+```
+Install @replit/database package for my Node.js project. I need it to replace my in-memory user store with persistent storage.
+```
+
+### Step 2: Create Database Store
+```
+Create a new ReplitUserStore class in server/store/replitUserStore.ts that implements the same UserStore interface as my current InMemoryUserStore. 
+
+The interface has these methods:
+- getUserByPhone(phoneNumber: string): UserRecord | undefined
+- createUser(user: { phoneNumber: string; fullName: string; sessions?: SessionRecord[] }): UserRecord
+- updateUser(phoneNumber: string, updates: Partial<Omit<UserRecord, 'phoneNumber'>>): UserRecord
+
+UserRecord type:
+- phoneNumber: string
+- fullName: string
+- sessions: SessionRecord[]
+
+Use @replit/database to store and retrieve user data. Store all users in a single 'users' key in the database.
+```
+
+### Step 3: Update Server for Replit
+```
+Update server/index.ts to:
+1. Detect if running on Replit (check for process.env.REPL_ID)
+2. Auto-detect Replit URL: https://${REPL_SLUG}.${REPL_OWNER}.repl.co
+3. Update FRONTEND_URL to use Replit URL if on Replit
+4. Update CORS to allow Replit domain
+5. Serve frontend static files from 'dist' folder using express.static
+6. Update WebSocket URL to use wss:// for Replit
+7. Update WebSocket origin validation for Replit domain
+```
+
+### Step 4: Switch to Replit Database
+```
+Update server/index.ts to use ReplitUserStore instead of InMemoryUserStore. Import from server/store/replitUserStore.ts and replace the userStore import.
+```
+
+### Step 5: Test and Verify
+```
+Help me verify that:
+1. Replit Database is working (data persists)
+2. WebSocket connections work with wss://
+3. Frontend is served correctly from Express
+4. CORS allows Replit domain
+5. Environment variables are set correctly
+```
+
+---
+
+## Quick Copy-Paste Prompt (Most Recommended)
+
+```
+I need to migrate my voice agent app to use Replit Database and make it Replit-compatible.
+
+Current setup:
+- Express + TypeScript backend with WebSocket
+- In-memory user store at server/store/userStore.ts
+- React frontend built to dist/ folder
+- Needs to serve frontend from Express in production
+
+Please:
+1. Install @replit/database
+2. Create server/store/replitUserStore.ts implementing the UserStore interface (getUserByPhone, createUser, updateUser methods)
+3. Update server/index.ts to:
+   - Detect Replit (process.env.REPL_ID)
+   - Auto-detect URL from REPL_SLUG and REPL_OWNER
+   - Serve dist/ folder as static files
+   - Use wss:// for WebSocket on Replit
+   - Allow Replit domain in CORS
+4. Switch userStore import to use ReplitUserStore
+
+The UserStore interface and types are in server/store/userStore.ts. Keep the same interface, just change the implementation to use Replit Database.
+```
+
+---
+
+## Tips for Using These Prompts
+
+1. **Start with the Quick Copy-Paste Prompt** - It's comprehensive but concise
+2. **If Replit AI gets confused**, use the Step-by-Step prompts one at a time
+3. **Be specific about file locations** - Mention exact file paths
+4. **Ask for verification** - After changes, ask Replit to verify everything works
+5. **Test incrementally** - Test each change before moving to the next
+
+---
+
+## What to Expect from Replit AI
+
+After using these prompts, Replit AI should:
+- Install @replit/database package
+- Create ReplitUserStore implementation
+- Update server/index.ts with Replit detection
+- Add static file serving
+- Update CORS and WebSocket configuration
+- Help you test the setup
+
+---
+
+## After Replit AI Helps
+
+Once Replit AI makes the changes, verify:
+1. ✅ @replit/database is in package.json
+2. ✅ server/store/replitUserStore.ts exists
+3. ✅ server/index.ts detects Replit environment
+4. ✅ Frontend is served from Express
+5. ✅ WebSocket uses wss:// on Replit
+6. ✅ CORS allows Replit domain
+7. ✅ UserStore is switched to ReplitUserStore
+
+Then test:
+- Deploy to Replit
+- Set GEMINI_API_KEY in Secrets
+- Test user registration
+- Test WebSocket connection
+- Verify data persists after restart
+
