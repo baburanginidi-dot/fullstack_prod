@@ -1,18 +1,32 @@
 import express from 'express';
 import http from 'http';
+import path from 'path';
 import { randomUUID } from 'crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import { GoogleGenAI, Modality, Blob } from '@google/genai';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
-import { normalizePhoneNumber, isPhoneNumberFormatValid, isPhoneNumberUnique } from './utils/phoneValidator';
-import { userStore, type SessionRecord } from './store/userStore';
+import { normalizePhoneNumber, isPhoneNumberFormatValid } from './utils/phoneValidator';
+import { userStore, type SessionRecord } from './store/replitUserStore';
 
 dotenv.config();
 
+const IS_REPLIT = Boolean(process.env.REPL_ID);
+const REPL_SLUG = process.env.REPL_SLUG || '';
+const REPL_OWNER = process.env.REPL_OWNER || '';
+
+let REPLIT_URL = '';
+if (IS_REPLIT && REPL_SLUG && REPL_OWNER) {
+    REPLIT_URL = `https://${REPL_SLUG}.${REPL_OWNER}.repl.co`;
+} else if (IS_REPLIT) {
+    console.warn('Replit detected but REPL_SLUG or REPL_OWNER missing. Using default localhost URL.');
+}
+
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+const FRONTEND_URL = process.env.FRONTEND_URL || (IS_REPLIT && REPLIT_URL ? REPLIT_URL : 'http://localhost:3000');
+const WS_PROTOCOL = IS_REPLIT ? 'wss:' : 'ws:';
+
 if (!GEMINI_API_KEY) {
     throw new Error('Missing GEMINI_API_KEY environment variable.');
 }
@@ -23,9 +37,21 @@ type LiveSession = {
 };
 
 const app = express();
+
+const allowedOrigins = [FRONTEND_URL];
+if (IS_REPLIT && REPLIT_URL && REPLIT_URL !== FRONTEND_URL) {
+    allowedOrigins.push(REPLIT_URL);
+}
+
 app.use(
     cors({
-        origin: FRONTEND_URL,
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        },
         credentials: true,
     }),
 );
@@ -34,6 +60,18 @@ app.use(
         contentSecurityPolicy: false,
     }),
 );
+
+if (IS_REPLIT) {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path.startsWith('/ws')) {
+            return next();
+        }
+        res.sendFile(path.join(distPath, 'index.html'));
+    });
+}
+
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
@@ -45,7 +83,7 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
     let connectedPhoneNumber: string | null = null;
 
     const requestOrigin = req.headers.origin;
-    if (requestOrigin && requestOrigin !== FRONTEND_URL) {
+    if (requestOrigin && !allowedOrigins.includes(requestOrigin)) {
         console.warn(`Blocked WS connection from origin ${requestOrigin}`);
         ws.close(1008, 'Origin not allowed');
         return;
@@ -74,20 +112,15 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
                     return;
                 }
 
-                const phoneIsUnique = isPhoneNumberUnique(
-                    normalizedPhoneNumber,
-                    (phone) => Boolean(userStore.getUserByPhone(phone))
-                );
-
-                let userRecord = userStore.getUserByPhone(normalizedPhoneNumber);
-                if (phoneIsUnique || !userRecord) {
-                    userRecord = userStore.createUser({
+                let userRecord = await userStore.getUserByPhone(normalizedPhoneNumber);
+                if (!userRecord) {
+                    userRecord = await userStore.createUser({
                         phoneNumber: normalizedPhoneNumber,
                         fullName,
                         sessions: [],
                     });
                 } else if (userRecord.fullName !== fullName) {
-                    userRecord = userStore.updateUser(normalizedPhoneNumber, { fullName });
+                    userRecord = await userStore.updateUser(normalizedPhoneNumber, { fullName });
                 }
 
                 const sessionRecord: SessionRecord = {
@@ -95,7 +128,7 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
                     startedAt: new Date().toISOString(),
                     status: 'active' as const,
                 };
-                userRecord = userStore.updateUser(normalizedPhoneNumber, {
+                userRecord = await userStore.updateUser(normalizedPhoneNumber, {
                     sessions: [...userRecord.sessions, sessionRecord],
                 });
 
@@ -144,36 +177,36 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
         }
     });
 
-    ws.on('close', () => {
+    ws.on('close', async () => {
         console.log('Client disconnected');
         if (geminiSession) {
             geminiSession.close();
             geminiSession = null;
         }
         if (connectedPhoneNumber && activeSessionId) {
-            const record = userStore.getUserByPhone(connectedPhoneNumber);
+            const record = await userStore.getUserByPhone(connectedPhoneNumber);
             if (record) {
                 const updatedSessions = record.sessions.map((session) =>
                     session.id === activeSessionId ? { ...session, status: 'ended' as const } : session
                 );
-                userStore.updateUser(connectedPhoneNumber, { sessions: updatedSessions });
+                await userStore.updateUser(connectedPhoneNumber, { sessions: updatedSessions });
             }
         }
     });
 
-    ws.on('error', (error) => {
+    ws.on('error', async (error) => {
         console.error('WebSocket error:', error);
         if (geminiSession) {
             geminiSession.close();
             geminiSession = null;
         }
         if (connectedPhoneNumber && activeSessionId) {
-            const record = userStore.getUserByPhone(connectedPhoneNumber);
+            const record = await userStore.getUserByPhone(connectedPhoneNumber);
             if (record) {
                 const updatedSessions = record.sessions.map((session) =>
                     session.id === activeSessionId ? { ...session, status: 'ended' as const } : session
                 );
-                userStore.updateUser(connectedPhoneNumber, { sessions: updatedSessions });
+                await userStore.updateUser(connectedPhoneNumber, { sessions: updatedSessions });
             }
         }
     });
@@ -181,6 +214,12 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
 
 server.listen(PORT, () => {
     console.log(`Server is listening on port ${PORT}`);
+    if (IS_REPLIT) {
+        console.log(`Replit mode detected`);
+        console.log(`Frontend URL: ${FRONTEND_URL}`);
+        console.log(`WebSocket protocol: ${WS_PROTOCOL}`);
+        console.log(`Serving static files from: dist/`);
+    }
 });
 
 // This is a basic placeholder for a real server implementation.

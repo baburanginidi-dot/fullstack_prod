@@ -12,12 +12,12 @@ export type UserRecord = {
 };
 
 export interface UserStore {
-    getUserByPhone(phoneNumber: string): UserRecord | undefined;
-    createUser(user: { phoneNumber: string; fullName: string; sessions?: SessionRecord[] }): UserRecord;
+    getUserByPhone(phoneNumber: string): Promise<UserRecord | undefined> | UserRecord | undefined;
+    createUser(user: { phoneNumber: string; fullName: string; sessions?: SessionRecord[] }): Promise<UserRecord> | UserRecord;
     updateUser(
         phoneNumber: string,
         updates: Partial<Omit<UserRecord, 'phoneNumber'>>
-    ): UserRecord;
+    ): Promise<UserRecord> | UserRecord;
 }
 
 class InMemoryUserStore implements UserStore {
