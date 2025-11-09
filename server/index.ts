@@ -46,7 +46,11 @@ if (IS_REPLIT && REPLIT_URL && REPLIT_URL !== FRONTEND_URL) {
 app.use(
     cors({
         origin: (origin, callback) => {
-            if (!origin || allowedOrigins.includes(origin)) {
+            if (!origin) {
+                callback(null, true);
+            } else if (allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else if (IS_REPLIT && origin.includes('.repl.co')) {
                 callback(null, true);
             } else {
                 callback(new Error('Not allowed by CORS'));
@@ -84,9 +88,13 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
 
     const requestOrigin = req.headers.origin;
     if (requestOrigin && !allowedOrigins.includes(requestOrigin)) {
-        console.warn(`Blocked WS connection from origin ${requestOrigin}`);
-        ws.close(1008, 'Origin not allowed');
-        return;
+        if (IS_REPLIT && requestOrigin.includes('.repl.co')) {
+            // Allow WebSocket connections from Replit domains
+        } else {
+            console.warn(`Blocked WS connection from origin ${requestOrigin}`);
+            ws.close(1008, 'Origin not allowed');
+            return;
+        }
     }
     console.log('Client connected');
 
