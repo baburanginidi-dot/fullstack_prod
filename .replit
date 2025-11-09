@@ -81,3 +81,11 @@ waitForPort = 3001
 [agent]
 expertMode = true
 
+[[ports]]
+localPort = 3001
+externalPort = 80
+
+[[ports]]
+localPort = 46735
+externalPort = 3000
+
