@@ -1,49 +1,39 @@
-import express from 'express';
-import http from 'http';
-import { randomUUID } from 'crypto';
-import { WebSocketServer, WebSocket } from 'ws';
-import { GoogleGenAI, Modality, Blob } from '@google/genai';
-import dotenv from 'dotenv';
-import cors from 'cors';
-import helmet from 'helmet';
-import { normalizePhoneNumber, isPhoneNumberFormatValid, isPhoneNumberUnique } from './utils/phoneValidator';
-import { userStore, type SessionRecord } from './store/userStore';
-
-dotenv.config();
-
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const http_1 = __importDefault(require("http"));
+const crypto_1 = require("crypto");
+const ws_1 = require("ws");
+const genai_1 = require("@google/genai");
+const dotenv_1 = __importDefault(require("dotenv"));
+const cors_1 = __importDefault(require("cors"));
+const helmet_1 = __importDefault(require("helmet"));
+const phoneValidator_1 = require("./utils/phoneValidator");
+const userStore_1 = require("./store/userStore");
+dotenv_1.default.config();
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 if (!GEMINI_API_KEY) {
     throw new Error('Missing GEMINI_API_KEY environment variable.');
 }
-
-type LiveSession = {
-    close: () => void;
-    sendRealtimeInput: (input: { media: Blob }) => Promise<void> | void;
-};
-
-const app = express();
-app.use(
-    cors({
-        origin: FRONTEND_URL,
-        credentials: true,
-    }),
-);
-app.use(
-    helmet({
-        contentSecurityPolicy: false,
-    }),
-);
-const server = http.createServer(app);
-const wss = new WebSocketServer({ server });
-
+const app = (0, express_1.default)();
+app.use((0, cors_1.default)({
+    origin: FRONTEND_URL,
+    credentials: true,
+}));
+app.use((0, helmet_1.default)({
+    contentSecurityPolicy: false,
+}));
+const server = http_1.default.createServer(app);
+const wss = new ws_1.WebSocketServer({ server });
 const PORT = process.env.PORT || 3001;
-
-wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
-    let geminiSession: LiveSession | null = null;
-    let activeSessionId: string | null = null;
-    let connectedPhoneNumber: string | null = null;
-
+wss.on('connection', (ws, req) => {
+    let geminiSession = null;
+    let activeSessionId = null;
+    let connectedPhoneNumber = null;
     const requestOrigin = req.headers.origin;
     if (requestOrigin && requestOrigin !== FRONTEND_URL) {
         console.warn(`Blocked WS connection from origin ${requestOrigin}`);
@@ -51,63 +41,51 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
         return;
     }
     console.log('Client connected');
-
     // FIX: Changed Buffer to any to avoid type error when @types/node is not present.
-    ws.on('message', async (message: any) => {
+    ws.on('message', async (message) => {
         try {
             const data = JSON.parse(message.toString());
-
             if (data.type === 'init') {
                 const { systemInstruction, voice, user: incomingUser } = data.payload;
                 const fullName = (incomingUser?.fullName || '').trim();
-                const normalizedPhoneNumber = normalizePhoneNumber(incomingUser?.phoneNumber || '');
-
+                const normalizedPhoneNumber = (0, phoneValidator_1.normalizePhoneNumber)(incomingUser?.phoneNumber || '');
                 if (!fullName || !normalizedPhoneNumber) {
                     ws.send(JSON.stringify({ type: 'error', payload: 'Full name and phone number are required.' }));
                     ws.close(1008, 'Invalid user information');
                     return;
                 }
-
-                if (!isPhoneNumberFormatValid(normalizedPhoneNumber)) {
+                if (!(0, phoneValidator_1.isPhoneNumberFormatValid)(normalizedPhoneNumber)) {
                     ws.send(JSON.stringify({ type: 'error', payload: 'Invalid phone number format.' }));
                     ws.close(1008, 'Invalid phone number');
                     return;
                 }
-
-                const phoneIsUnique = isPhoneNumberUnique(
-                    normalizedPhoneNumber,
-                    (phone) => Boolean(userStore.getUserByPhone(phone))
-                );
-
-                let userRecord = userStore.getUserByPhone(normalizedPhoneNumber);
+                const phoneIsUnique = (0, phoneValidator_1.isPhoneNumberUnique)(normalizedPhoneNumber, (phone) => Boolean(userStore_1.userStore.getUserByPhone(phone)));
+                let userRecord = userStore_1.userStore.getUserByPhone(normalizedPhoneNumber);
                 if (phoneIsUnique || !userRecord) {
-                    userRecord = userStore.createUser({
+                    userRecord = userStore_1.userStore.createUser({
                         phoneNumber: normalizedPhoneNumber,
                         fullName,
                         sessions: [],
                     });
-                } else if (userRecord.fullName !== fullName) {
-                    userRecord = userStore.updateUser(normalizedPhoneNumber, { fullName });
                 }
-
-                const sessionRecord: SessionRecord = {
-                    id: randomUUID(),
+                else if (userRecord.fullName !== fullName) {
+                    userRecord = userStore_1.userStore.updateUser(normalizedPhoneNumber, { fullName });
+                }
+                const sessionRecord = {
+                    id: (0, crypto_1.randomUUID)(),
                     startedAt: new Date().toISOString(),
-                    status: 'active' as const,
+                    status: 'active',
                 };
-                userRecord = userStore.updateUser(normalizedPhoneNumber, {
+                userRecord = userStore_1.userStore.updateUser(normalizedPhoneNumber, {
                     sessions: [...userRecord.sessions, sessionRecord],
                 });
-
                 connectedPhoneNumber = normalizedPhoneNumber;
                 activeSessionId = sessionRecord.id;
-                
-                const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-
+                const ai = new genai_1.GoogleGenAI({ apiKey: GEMINI_API_KEY });
                 geminiSession = await ai.live.connect({
                     model: 'gemini-2.5-flash-native-audio-preview-09-2025',
                     config: {
-                        responseModalities: [Modality.AUDIO],
+                        responseModalities: [genai_1.Modality.AUDIO],
                         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: voice } } },
                         systemInstruction: systemInstruction,
                         inputAudioTranscription: {},
@@ -116,7 +94,7 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
                     callbacks: {
                         onopen: () => {
                             console.log('Gemini session opened.');
-                             ws.send(JSON.stringify({ type: 'status', payload: 'LISTENING' }));
+                            ws.send(JSON.stringify({ type: 'status', payload: 'LISTENING' }));
                         },
                         onmessage: (msg) => {
                             ws.send(JSON.stringify({ type: 'gemini_response', payload: msg }));
@@ -131,19 +109,19 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
                         },
                     },
                 });
-
-            } else if (data.type === 'audio' && geminiSession) {
-                const pcmBlob: Blob = {
+            }
+            else if (data.type === 'audio' && geminiSession) {
+                const pcmBlob = {
                     data: data.payload, // base64 string from client
                     mimeType: 'audio/pcm;rate=16000',
                 };
                 await geminiSession.sendRealtimeInput({ media: pcmBlob });
             }
-        } catch (error) {
+        }
+        catch (error) {
             console.error('WebSocket message error:', error);
         }
     });
-
     ws.on('close', () => {
         console.log('Client disconnected');
         if (geminiSession) {
@@ -151,16 +129,13 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
             geminiSession = null;
         }
         if (connectedPhoneNumber && activeSessionId) {
-            const record = userStore.getUserByPhone(connectedPhoneNumber);
+            const record = userStore_1.userStore.getUserByPhone(connectedPhoneNumber);
             if (record) {
-                const updatedSessions = record.sessions.map((session) =>
-                    session.id === activeSessionId ? { ...session, status: 'ended' as const } : session
-                );
-                userStore.updateUser(connectedPhoneNumber, { sessions: updatedSessions });
+                const updatedSessions = record.sessions.map((session) => session.id === activeSessionId ? { ...session, status: 'ended' } : session);
+                userStore_1.userStore.updateUser(connectedPhoneNumber, { sessions: updatedSessions });
             }
         }
     });
-
     ws.on('error', (error) => {
         console.error('WebSocket error:', error);
         if (geminiSession) {
@@ -168,21 +143,17 @@ wss.on('connection', (ws: WebSocket, req: http.IncomingMessage) => {
             geminiSession = null;
         }
         if (connectedPhoneNumber && activeSessionId) {
-            const record = userStore.getUserByPhone(connectedPhoneNumber);
+            const record = userStore_1.userStore.getUserByPhone(connectedPhoneNumber);
             if (record) {
-                const updatedSessions = record.sessions.map((session) =>
-                    session.id === activeSessionId ? { ...session, status: 'ended' as const } : session
-                );
-                userStore.updateUser(connectedPhoneNumber, { sessions: updatedSessions });
+                const updatedSessions = record.sessions.map((session) => session.id === activeSessionId ? { ...session, status: 'ended' } : session);
+                userStore_1.userStore.updateUser(connectedPhoneNumber, { sessions: updatedSessions });
             }
         }
     });
 });
-
 server.listen(PORT, () => {
     console.log(`Server is listening on port ${PORT}`);
 });
-
 // This is a basic placeholder for a real server implementation.
 // In a production environment, you would transpile this TypeScript file to JavaScript.
 // For example, using `tsc server/index.ts` which would generate `server/index.js`.

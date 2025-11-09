@@ -50,6 +50,13 @@ enum AgentStatus {
     ERROR = 'ERROR',
 }
 
+const resolveWsUrl = () => {
+    if (process.env.WS_URL) {
+        return process.env.WS_URL;
+    }
+    return import.meta.env.PROD ? 'wss://localhost:3001' : 'ws://localhost:3001';
+};
+
 const Agent: React.FC = () => {
     const { user, logout, activePrompt, settings } = useAppContext();
     const navigate = useNavigate();
@@ -103,9 +110,8 @@ const Agent: React.FC = () => {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             mediaStreamRef.current = stream;
 
-            // Use ws://localhost:3001 for local development
-            // In a real deployment, you'd use a secure WebSocket wss://your-server-address
-            wsRef.current = new WebSocket('ws://localhost:3001');
+            const wsUrl = resolveWsUrl();
+            wsRef.current = new WebSocket(wsUrl);
 
             audioContextRefs.current.input = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 16000 });
             audioContextRefs.current.output = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
@@ -120,7 +126,11 @@ const Agent: React.FC = () => {
                     type: 'init',
                     payload: {
                         systemInstruction,
-                        voice: settings.voice
+                        voice: settings.voice,
+                        user: {
+                            fullName: user?.fullName ?? '',
+                            phoneNumber: user?.phoneNumber ?? ''
+                        }
                     }
                 }));
 

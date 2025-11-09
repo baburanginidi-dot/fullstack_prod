@@ -1,0 +1,55 @@
+# Replit Configuration File
+# This file tells Replit how to run your project
+
+language = "nodejs"
+
+# Command to run the project
+run = "npm install && npm run build && npm run build:server && node server/index.js"
+
+# Deploy configuration
+[deploy]
+run = ["sh", "-c", "npm install && npm run build && npm run build:server && node server/index.js"]
+
+# Environment variables (can be overridden in Replit Secrets)
+[env]
+PORT = "3001"
+NODE_ENV = "production"
+
+# Nix package configuration (if needed)
+[nix]
+channel = "stable-22_11"
+
+# Language server configuration
+[languages.javascript]
+pattern = "**/*.{js,jsx,ts,tsx}"
+
+[languages.javascript.languageServer]
+start = "typescript-language-server --stdio"
+
+# Unit test configuration (optional)
+[unitTest]
+language = "nodejs"
+
+# Debugger configuration
+[debugger]
+support = true
+
+[debugger.interactive]
+transport = "localhost"
+startCommand = ["dap-node"]
+initializeMessage = { command = "initialize", arguments = { adapterID = "node", adapterVersion = "0.x", format = "base64", linesStartAt1 = true, columnsStartAt1 = true, pathFormat = "path" } }
+launchMessage = { command = "launch", arguments = { type = "node", name = "Debug", request = "launch", program = "server/index.js", stopOnEntry = false } }
+
+# Package search configuration
+[packager]
+language = "nodejs"
+
+[packager.features]
+packageSearch = true
+guessImports = true
+enabledForHosting = false
+
+# File watcher configuration
+[watcher]
+watches = ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"]
+
